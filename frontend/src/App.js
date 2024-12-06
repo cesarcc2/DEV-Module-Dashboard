@@ -9,13 +9,33 @@ function App() {
   const [running, setRunning] = useState({});
   const [search, setSearch] = useState("");
   const [selectedModules, setSelectedModules] = useState([]);
+  const [moduleOrder, setModuleOrder] = useState([]);
+  const [dragOverTarget, setDragOverTarget] = useState(null);
 
   useEffect(() => {
+    loadModuleOrder();
     fetchModules();
     fetchRunningScripts();
     loadSelectedModules();
     setupWebSocket();
   }, []);
+
+  useEffect(() => {
+    setModuleOrder(selectedModules);
+  }, [selectedModules]);
+
+  useEffect(() => {
+    saveModuleOrder(moduleOrder);
+  }, [moduleOrder]);
+
+  const saveModuleOrder = (moduleOrder) => {
+    localStorage.setItem("moduleOrder", JSON.stringify(moduleOrder));
+  } 
+
+  const loadModuleOrder = () => {
+    const savedOrder = JSON.parse(localStorage.getItem("moduleOrder")) || [];
+    setModuleOrder(savedOrder);
+  };
 
   const setupWebSocket = () => {
     const ws = new WebSocket(WS_BASE);
@@ -128,13 +148,52 @@ function App() {
     }));
   };
 
+
+
+
+
+
+  const handleDragStart = (event, modulePath) => {
+    event.dataTransfer.setData("modulePath", modulePath);
+  };
+  
+  const handleDragOver = (event, targetPath) => {
+    event.preventDefault();
+    setDragOverTarget(targetPath); // Set the current drag-over target
+  };
+  
+  const handleDrop = (event, targetPath) => {
+    event.preventDefault();
+    const draggedPath = event.dataTransfer.getData("modulePath");
+  
+    // Update the order
+    setModuleOrder((prevOrder) => {
+      const updatedOrder = [...prevOrder];
+      const draggedIndex = updatedOrder.indexOf(draggedPath);
+      const targetIndex = updatedOrder.indexOf(targetPath);
+  
+      // Reorder the modules
+      updatedOrder.splice(draggedIndex, 1);
+      updatedOrder.splice(targetIndex, 0, draggedPath);
+  
+      return updatedOrder;
+    });
+  
+    setDragOverTarget(null); // Reset the drag-over target
+  };
+  
+  const handleDragLeave = () => {
+    setDragOverTarget(null); // Clear the drag-over state when leaving
+  };
+
+
   const filteredModules = modules.filter((module) =>
     module.name.toLowerCase().includes(search.toLowerCase())
   );
 
-  const displayedModules = modules.filter((module) =>
-    selectedModules.includes(module.path)
-  );
+  const displayedModules = modules
+  .filter((module) => moduleOrder.includes(module.path))
+  .sort((a, b) => moduleOrder.indexOf(a.path) - moduleOrder.indexOf(b.path));
 
 
   // Render the script buttons dynamically
@@ -230,7 +289,15 @@ function App() {
         <main>
           <div className="modules">
             {displayedModules.map((module) => (
-              <div className="module-card" key={module.path}>
+              <div
+                className={`module-card ${dragOverTarget === module.path ? "drag-over" : ""}`}
+                key={module.path}
+                draggable
+                onDragStart={(event) => handleDragStart(event, module.path)}
+                onDragOver={(event) => handleDragOver(event, module.path)}
+                onDrop={(event) => handleDrop(event, module.path)}
+                onDragLeave={handleDragLeave}
+              >
                 <h2>{module.name}</h2>
                 <p>Path: {module.path.substring(module.path.indexOf("/Modules"))}</p>
                 <h3>Scripts</h3>

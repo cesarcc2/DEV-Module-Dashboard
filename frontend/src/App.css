@@ -117,6 +117,8 @@ header {
   width: 300px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   min-height: 14rem !important;
+  cursor: grab;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
 .module-card h2 {
@@ -172,4 +174,18 @@ header {
 .module-card button:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+}
+
+.module-card:active {
+  cursor: grabbing;
+}
+
+.module-card.dragging {
+  opacity: 0.5;
+  border: 2px dashed #007bff;
+}
+
+.module-card.drag-over {
+  transform: scale(1.05);
+  box-shadow: 0 8px 16px rgba(0, 123, 255, 0.3);
 }
