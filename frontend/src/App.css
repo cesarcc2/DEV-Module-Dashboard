@@ -116,7 +116,7 @@ header {
   padding: 15px;
   width: 300px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  min-height: 12rem !important;
+  min-height: 14rem !important;
 }
 
 .module-card h2 {
@@ -159,6 +159,14 @@ header {
 
 .running:hover {
   background-color: #1e7e34 !important;
+}
+
+.terminate {
+  background-color: #303030 !important;
+}
+
+.terminate:hover {
+  background-color: #151515 !important;
 }
 
 .module-card button:disabled {

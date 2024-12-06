@@ -113,7 +113,11 @@ app.get("/api/modules", (req, res) => {
 // API to fetch running commands
 app.get("/api/running-scripts", (req, res) => {
   const runningScripts = Array.from(runningCommands.entries()).flatMap(([modulePath, processes]) =>
-    processes.map(({ script }) => ({ modulePath, script }))
+    processes.map(({ script, url }) => ({
+      modulePath,
+      script,
+      url, // Include URL if available
+    }))
   );
   res.json(runningScripts);
 });
@@ -134,25 +138,45 @@ app.post("/api/run-script", (req, res) => {
   if (!runningCommands.has(modulePath)) {
     runningCommands.set(modulePath, []);
   }
-  runningCommands.get(modulePath).push({ script, process });
+  runningCommands.get(modulePath).push({ script, process, url: null });
 
-  process.stdout.on("data", (data) => console.log(`[${modulePath}] ${data}`));
+  // Listen for stdout to detect localhost URLs
+  process.stdout.on("data", (data) => {
+    console.log(`[${modulePath}] ${data}`);
+    const output = data.toString();
+    const urlMatch = output.match(/http:\/\/localhost:\d+/); // Match localhost URLs
+    if (urlMatch) {
+      const url = urlMatch[0];
+      const moduleProcesses = runningCommands.get(modulePath);
+      const runningProcess = moduleProcesses.find((p) => p.script === script);
+      if (runningProcess) {
+        runningProcess.url = url;
+        notifyClients({
+          type: "script-url-detected",
+          modulePath,
+          script,
+          url,
+        });
+      }
+    }
+  });
+
   process.stderr.on("data", (data) => console.error(`[${modulePath}] ${data}`));
 
   process.on("close", (code) => {
     const moduleProcesses = runningCommands.get(modulePath) || [];
     const index = moduleProcesses.findIndex((p) => p.process === process);
     let stoppedScript = null;
-  
+
     if (index !== -1) {
       stoppedScript = moduleProcesses[index].script;
       moduleProcesses.splice(index, 1);
     }
-  
+
     if (moduleProcesses.length === 0) {
       runningCommands.delete(modulePath);
     }
-  
+
     if (stoppedScript) {
       notifyClients({
         type: "process-stopped",
@@ -160,7 +184,7 @@ app.post("/api/run-script", (req, res) => {
         script: stoppedScript,
       });
     }
-  
+
     console.log(`[${modulePath}] Process for '${stoppedScript}' exited with code ${code}`);
   });
 

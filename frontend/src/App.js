@@ -22,16 +22,29 @@ function App() {
 
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
+
       if (message.type === "process-stopped") {
         const { modulePath, script } = message;
         setRunning((prev) => {
           const updated = { ...prev };
           if (updated[modulePath]) {
-            updated[modulePath] = { ...updated[modulePath], [script]: false };
+            updated[modulePath] = { ...updated[modulePath], [script]: { isRunning: false, url: null } };
           }
           return updated;
         });
       }
+  
+      if (message.type === "script-url-detected") {
+        const { modulePath, script, url } = message;
+        setRunning((prev) => ({
+          ...prev,
+          [modulePath]: {
+            ...(prev[modulePath] || {}),
+            [script]: { isRunning: true, url }, // Update only the relevant script
+          },
+        }));
+      }
+
     };
 
     return () => ws.close();
@@ -46,10 +59,15 @@ function App() {
   const fetchRunningScripts = async () => {
     const response = await fetch(`${API_BASE}/running-scripts`);
     const data = await response.json();
-    const runningState = data.reduce((acc, { modulePath, script }) => {
-      acc[modulePath] = script;
+  
+    const runningState = data.reduce((acc, { modulePath, script, url }) => {
+      acc[modulePath] = {
+        ...(acc[modulePath] || {}),
+        [script]: { isRunning: true, url: url || null }, // Add URL if available
+      };
       return acc;
     }, {});
+  
     setRunning(runningState);
   };
 
@@ -72,15 +90,30 @@ function App() {
   };
 
   const runScript = async (modulePath, script) => {
-    await fetch(`${API_BASE}/run-script`, {
+    setRunning((prev) => ({
+      ...prev,
+      [modulePath]: {
+        ...(prev[modulePath] || {}),
+        [script]: { isRunning: "starting", url: null }, // Mark as starting
+      },
+    }));
+  
+    const response = await fetch(`${API_BASE}/run-script`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ modulePath, script }),
     });
-    setRunning((prev) => ({
-      ...prev,
-      [modulePath]: { ...(prev[modulePath] || {}), [script]: true },
-    }));
+  
+    if (!response.ok) {
+      // If the API call fails, revert the state
+      setRunning((prev) => ({
+        ...prev,
+        [modulePath]: {
+          ...(prev[modulePath] || {}),
+          [script]: { isRunning: false, url: null },
+        },
+      }));
+    }
   };
 
   const stopScript = async (modulePath, script) => {
@@ -106,18 +139,38 @@ function App() {
 
   // Render the script buttons dynamically
   const renderScriptButtons = (modulePath, scriptName) => {
-    const isRunning = running[modulePath]?.[scriptName];
+    const scriptState = running[modulePath]?.[scriptName];
+    const isRunning = scriptState?.isRunning;
+    const url = scriptState?.url;
+    
+    const buttonClass = isRunning == 'starting' ? 'terminate' : isRunning === true
+      ? url
+        ? "terminate" // Script serves localhost, doesn't auto-terminate
+        : "terminate" // Script auto-terminates
+      : "";
+  
+    const buttonText = isRunning === "starting"
+      ? `Stop ${scriptName}` // Display "Running <script name>" while starting
+      : isRunning
+      ? `Stop ${scriptName}` // Display "Stop" when the script is fully running
+      : `Run ${scriptName}`; // Default text
+  
     return (
-      <button
-        className={isRunning ? "running" : ""}
-        onClick={() =>
-          isRunning
-            ? stopScript(modulePath, scriptName)
-            : runScript(modulePath, scriptName)
-        }
-      >
-        {isRunning ? "Stop" : "Run"} {scriptName}
-      </button>
+      <div style={{ display: "flex", gap: "10px", justifyContent: "space-between", width: "100%" }}>
+        <button
+          className={buttonClass}
+          onClick={() =>
+            isRunning
+              ? stopScript(modulePath, scriptName)
+              : runScript(modulePath, scriptName)
+          }
+        >
+          {buttonText}
+        </button>
+        {isRunning === true && url && (
+          <button className="running" onClick={() => window.open(url, "_blank")}>Open</button>
+        )}
+      </div>
     );
   };
 
