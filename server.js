@@ -133,6 +133,10 @@ app.get("*", (req, res) => {
 });
 
 // Start the server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log(`Dev Dashboard server running on http://localhost:${PORT}`);
+  
+  // Dynamically import the 'open' module and open the URL
+  const { default: open } = await import('open');
+  open(`http://localhost:${PORT}`);
 });
