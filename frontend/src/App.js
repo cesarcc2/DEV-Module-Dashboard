@@ -23,9 +23,12 @@ function App() {
     ws.onmessage = (event) => {
       const message = JSON.parse(event.data);
       if (message.type === "process-stopped") {
+        const { modulePath, script } = message;
         setRunning((prev) => {
           const updated = { ...prev };
-          delete updated[message.modulePath];
+          if (updated[modulePath]) {
+            updated[modulePath] = { ...updated[modulePath], [script]: false };
+          }
           return updated;
         });
       }
@@ -74,16 +77,22 @@ function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ modulePath, script }),
     });
-    setRunning((prev) => ({ ...prev, [modulePath]: script }));
+    setRunning((prev) => ({
+      ...prev,
+      [modulePath]: { ...(prev[modulePath] || {}), [script]: true },
+    }));
   };
 
-  const stopScript = async (modulePath) => {
+  const stopScript = async (modulePath, script) => {
     await fetch(`${API_BASE}/stop-script`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ modulePath }),
+      body: JSON.stringify({ modulePath, script }),
     });
-    setRunning((prev) => ({ ...prev, [modulePath]: null }));
+    setRunning((prev) => ({
+      ...prev,
+      [modulePath]: { ...(prev[modulePath] || {}), [script]: false },
+    }));
   };
 
   const filteredModules = modules.filter((module) =>
@@ -93,6 +102,24 @@ function App() {
   const displayedModules = modules.filter((module) =>
     selectedModules.includes(module.path)
   );
+
+
+  // Render the script buttons dynamically
+  const renderScriptButtons = (modulePath, scriptName) => {
+    const isRunning = running[modulePath]?.[scriptName];
+    return (
+      <button
+        className={isRunning ? "running" : ""}
+        onClick={() =>
+          isRunning
+            ? stopScript(modulePath, scriptName)
+            : runScript(modulePath, scriptName)
+        }
+      >
+        {isRunning ? "Stop" : "Run"} {scriptName}
+      </button>
+    );
+  };
 
   return (
     <div className="App">
@@ -155,20 +182,8 @@ function App() {
                 <p>Path: {module.path.substring(module.path.indexOf("/Modules"))}</p>
                 <h3>Scripts</h3>
                 <ul>
-                  {Object.entries(module.scripts).map(([scriptName, scriptCommand]) => (
-                    <li key={scriptName}>
-                      <button
-                        className={running[module.path] === scriptName ? "running" : ""}
-                        onClick={() =>
-                          running[module.path] === scriptName
-                            ? stopScript(module.path)
-                            : runScript(module.path, scriptName)
-                        }
-                      >
-                        {running[module.path] === scriptName ? "Stop" : "Run"} {scriptName}
-                      </button>
-                      {/* <span>{scriptCommand}</span> */}
-                    </li>
+                  {Object.entries(module.scripts).map(([scriptName]) => (
+                    <li key={scriptName}>{renderScriptButtons(module.path, scriptName)}</li>
                   ))}
                 </ul>
               </div>

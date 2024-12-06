@@ -112,10 +112,9 @@ app.get("/api/modules", (req, res) => {
 
 // API to fetch running commands
 app.get("/api/running-scripts", (req, res) => {
-  const runningScripts = Array.from(runningCommands.entries()).map(([modulePath, process]) => ({
-    modulePath,
-    script: process.script, // Store the script name when starting the process
-  }));
+  const runningScripts = Array.from(runningCommands.entries()).flatMap(([modulePath, processes]) =>
+    processes.map(({ script }) => ({ modulePath, script }))
+  );
   res.json(runningScripts);
 });
 
@@ -131,40 +130,70 @@ app.post("/api/run-script", (req, res) => {
   const process = spawn(command, args, { cwd: modulePath, stdio: "pipe", shell: true });
 
   process.script = script; // Attach the script name to the process object
-  runningCommands.set(modulePath, process);
+
+  if (!runningCommands.has(modulePath)) {
+    runningCommands.set(modulePath, []);
+  }
+  runningCommands.get(modulePath).push({ script, process });
 
   process.stdout.on("data", (data) => console.log(`[${modulePath}] ${data}`));
   process.stderr.on("data", (data) => console.error(`[${modulePath}] ${data}`));
 
   process.on("close", (code) => {
-    runningCommands.delete(modulePath);
-    // Notify the frontend
-    notifyClients({
-      type: "process-stopped",
-      modulePath,
-    });
-    console.log(`[${modulePath}] Process exited with code ${code}`);
+    const moduleProcesses = runningCommands.get(modulePath) || [];
+    const index = moduleProcesses.findIndex((p) => p.process === process);
+    let stoppedScript = null;
+  
+    if (index !== -1) {
+      stoppedScript = moduleProcesses[index].script;
+      moduleProcesses.splice(index, 1);
+    }
+  
+    if (moduleProcesses.length === 0) {
+      runningCommands.delete(modulePath);
+    }
+  
+    if (stoppedScript) {
+      notifyClients({
+        type: "process-stopped",
+        modulePath,
+        script: stoppedScript,
+      });
+    }
+  
+    console.log(`[${modulePath}] Process for '${stoppedScript}' exited with code ${code}`);
   });
 
   res.json({ success: true, message: `Running '${script}' in ${modulePath}` });
 });
 
 app.post("/api/stop-script", (req, res) => {
-  const { modulePath } = req.body;
-  const process = runningCommands.get(modulePath);
+  const { modulePath, script } = req.body;
+  const moduleProcesses = runningCommands.get(modulePath);
 
-  if (!process) {
-    return res.status(400).json({ error: "No running process for this module" });
+  if (!moduleProcesses) {
+    return res.status(400).json({ error: "No running processes for this module" });
   }
+
+  const processIndex = moduleProcesses.findIndex((p) => p.script === script);
+  if (processIndex === -1) {
+    return res.status(400).json({ error: `Script '${script}' is not running in ${modulePath}` });
+  }
+
+  const { process } = moduleProcesses[processIndex];
 
   kill(process.pid, "SIGINT", (err) => {
     if (err) {
-      console.error(`[${modulePath}] Failed to kill process:`, err);
+      console.error(`[${modulePath}] Failed to kill process '${script}':`, err);
       return res.status(500).json({ error: "Failed to stop the process" });
     }
 
-    runningCommands.delete(modulePath);
-    res.json({ success: true, message: `Stopped process in ${modulePath}` });
+    moduleProcesses.splice(processIndex, 1);
+    if (moduleProcesses.length === 0) {
+      runningCommands.delete(modulePath);
+    }
+
+    res.json({ success: true, message: `Stopped script '${script}' in ${modulePath}` });
   });
 });
 
