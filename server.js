@@ -4,6 +4,7 @@ const fs = require("fs");
 const path = require("path");
 const { spawn } = require("child_process");
 const kill = require("tree-kill");
+const { WebSocketServer } = require("ws");
 
 const app = express();
 const PORT = 4000;
@@ -12,6 +13,44 @@ const CONFIG_FILE = path.resolve(__dirname, "config.json");
 // Middleware
 app.use(cors());
 app.use(express.json());
+
+// Create a WebSocket server
+const wss = new WebSocketServer({ noServer: true });
+
+// Handle WebSocket connections
+const sockets = new Set();
+wss.on("connection", (socket) => {
+  sockets.add(socket);
+
+  socket.on("close", () => {
+    sockets.delete(socket);
+  });
+});
+
+// Upgrade HTTP server to handle WebSocket connections
+app.server = app.listen(PORT, () => {
+  console.log(`Dev Dashboard server running on http://localhost:${PORT}`);
+  
+  (async () => {
+    const { default: open } = await import("open");
+    open(`http://localhost:${PORT}`);
+  })();
+});
+
+app.server.on("upgrade", (request, socket, head) => {
+  wss.handleUpgrade(request, socket, head, (ws) => {
+    wss.emit("connection", ws, request);
+  });
+});
+
+// Notify WebSocket clients
+const notifyClients = (message) => {
+  for (const socket of sockets) {
+    if (socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify(message));
+    }
+  }
+};
 
 // Load configuration
 const loadConfig = () => {
@@ -99,6 +138,11 @@ app.post("/api/run-script", (req, res) => {
 
   process.on("close", (code) => {
     runningCommands.delete(modulePath);
+    // Notify the frontend
+    notifyClients({
+      type: "process-stopped",
+      modulePath,
+    });
     console.log(`[${modulePath}] Process exited with code ${code}`);
   });
 
@@ -130,13 +174,4 @@ app.use(express.static(frontendPath));
 
 app.get("*", (req, res) => {
   res.sendFile(path.join(frontendPath, "index.html"));
-});
-
-// Start the server
-app.listen(PORT, async () => {
-  console.log(`Dev Dashboard server running on http://localhost:${PORT}`);
-  
-  // Dynamically import the 'open' module and open the URL
-  const { default: open } = await import('open');
-  open(`http://localhost:${PORT}`);
 });

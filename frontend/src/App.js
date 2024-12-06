@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./App.css";
 
+const WS_BASE = "ws://localhost:4000";
 const API_BASE = "http://localhost:4000/api";
 
 function App() {
@@ -13,7 +14,25 @@ function App() {
     fetchModules();
     fetchRunningScripts();
     loadSelectedModules();
+    setupWebSocket();
   }, []);
+
+  const setupWebSocket = () => {
+    const ws = new WebSocket(WS_BASE);
+
+    ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === "process-stopped") {
+        setRunning((prev) => {
+          const updated = { ...prev };
+          delete updated[message.modulePath];
+          return updated;
+        });
+      }
+    };
+
+    return () => ws.close();
+  };
 
   const fetchModules = async () => {
     const response = await fetch(`${API_BASE}/modules`);
