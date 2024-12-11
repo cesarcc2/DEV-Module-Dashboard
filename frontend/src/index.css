@@ -18,3 +18,7 @@ button {
 #root {
   height: 100%;
 }
+
+main {
+  margin: 1rem;
+}

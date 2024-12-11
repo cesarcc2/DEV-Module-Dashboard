@@ -6,23 +6,39 @@ const API_BASE = "http://localhost:4000/api";
 
 function App() {
   const [modules, setModules] = useState([]);
+  const [apps, setApps] = useState([]);
+
   const [running, setRunning] = useState({});
   const [search, setSearch] = useState("");
   const [selectedModules, setSelectedModules] = useState([]);
+  const [selectedApps, setSelectedApps] = useState([]);
   const [moduleOrder, setModuleOrder] = useState([]);
+  const [appOrder, setAppOrder] = useState([]);
   const [dragOverTarget, setDragOverTarget] = useState(null);
+
 
   useEffect(() => {
     loadModuleOrder();
+    loadAppOrder();
     fetchModules();
+    fetchApps();
     fetchRunningScripts();
     loadSelectedModules();
+    loadSelectedApps();
     setupWebSocket();
   }, []);
 
   useEffect(() => {
     setModuleOrder(selectedModules);
   }, [selectedModules]);
+
+  useEffect(() => {
+    setAppOrder(selectedApps);
+  }, [selectedApps]);
+
+  useEffect(() => {
+    saveAppOrder(appOrder);
+  }, [appOrder]);
 
   useEffect(() => {
     saveModuleOrder(moduleOrder);
@@ -35,6 +51,33 @@ function App() {
   const loadModuleOrder = () => {
     const savedOrder = JSON.parse(localStorage.getItem("moduleOrder")) || [];
     setModuleOrder(savedOrder);
+  };
+
+  const saveAppOrder = (appOrder) => {
+    localStorage.setItem("appOrder", JSON.stringify(appOrder));
+  } 
+
+  const loadAppOrder = () => {
+    const savedOrder = JSON.parse(localStorage.getItem("appOrder")) || [];
+    setAppOrder(savedOrder);
+  };
+
+  const loadSelectedModules = () => {
+    const savedModules = JSON.parse(localStorage.getItem("selectedModules")) || [];
+    setSelectedModules(savedModules);
+  };
+
+  const saveSelectedModules = (updatedModules) => {
+    localStorage.setItem("selectedModules", JSON.stringify(updatedModules));
+  };
+
+  const loadSelectedApps = () => {
+    const savedApps = JSON.parse(localStorage.getItem("selectedApps")) || [];
+    setSelectedApps(savedApps);
+  };
+
+  const saveSelectedApps = (updatedApps) => {
+    localStorage.setItem("selectedApps", JSON.stringify(updatedApps));
   };
 
   const setupWebSocket = () => {
@@ -65,6 +108,14 @@ function App() {
         }));
       }
 
+      if (message.type === "install-progress") {
+        console.log(`Installation progress for ${message.directory}: ${message.message}`);
+      }
+
+      if (message.type === "link-progress") {
+        console.log(`Linking progress for ${message.directory}: ${message.message}`);
+      }
+
     };
 
     return () => ws.close();
@@ -73,7 +124,15 @@ function App() {
   const fetchModules = async () => {
     const response = await fetch(`${API_BASE}/modules`);
     const data = await response.json();
+    console.log("fetched modules: ", data);
     setModules(data);
+  };
+
+  const fetchApps = async () => {
+    const response = await fetch(`${API_BASE}/apps`);
+    const data = await response.json();
+    console.log("fetched apps: ",data);
+    setApps(data);
   };
 
   const fetchRunningScripts = async () => {
@@ -91,15 +150,6 @@ function App() {
     setRunning(runningState);
   };
 
-  const loadSelectedModules = () => {
-    const savedModules = JSON.parse(localStorage.getItem("selectedModules")) || [];
-    setSelectedModules(savedModules);
-  };
-
-  const saveSelectedModules = (updatedModules) => {
-    localStorage.setItem("selectedModules", JSON.stringify(updatedModules));
-  };
-
   const toggleModuleSelection = (modulePath) => {
     const updatedSelection = selectedModules.includes(modulePath)
       ? selectedModules.filter((path) => path !== modulePath)
@@ -107,6 +157,15 @@ function App() {
 
     setSelectedModules(updatedSelection);
     saveSelectedModules(updatedSelection);
+  };
+
+  const toggleAppSelection = (appPath) => {
+    const updatedSelection = selectedApps.includes(appPath)
+      ? selectedApps.filter((path) => path !== appPath)
+      : [...selectedApps, appPath];
+
+    setSelectedApps(updatedSelection);
+    saveSelectedApps(updatedSelection);
   };
 
   const runScript = async (modulePath, script) => {
@@ -191,9 +250,18 @@ function App() {
     module.name.toLowerCase().includes(search.toLowerCase())
   );
 
+
   const displayedModules = modules
   .filter((module) => moduleOrder.includes(module.path))
   .sort((a, b) => moduleOrder.indexOf(a.path) - moduleOrder.indexOf(b.path));
+
+  const filteredApps = apps.filter((app) =>
+    app.name.toLowerCase().includes(search.toLowerCase())
+  );
+
+  const displayedApps = apps
+  .filter((app) => appOrder.includes(app.path))
+  .sort((a, b) => appOrder.indexOf(a.path) - appOrder.indexOf(b.path));
 
 
   // Render the script buttons dynamically
@@ -233,22 +301,10 @@ function App() {
     );
   };
 
-  return (
-    <div className="App">
-      
-      <div className="content">
-        <aside className="side-panel">
-            <header>
-                <h1>Module Commands</h1>
-            </header>
-          <input
-            className="search-input"
-            type="text"
-            placeholder="Search modules..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-          <div className="select-all-container">
+  const renderModuleSideList = () => {
+    return (
+      <>
+        <div className="select-all-container">
             <label>
             Select All Modules
             <input
@@ -269,7 +325,7 @@ function App() {
                 }}
             />
             </label>
-        </div>
+          </div>
           <ul>
             {filteredModules.map((module) => (
               <li key={module.path}>
@@ -285,12 +341,66 @@ function App() {
               </li>
             ))}
           </ul>
-        </aside>
-        <main>
-          <div className="modules">
+        </>
+    );
+  }
+
+  const renderAppSideList = () => {
+    return (
+      <>
+        <div className="select-all-container">
+            <label>
+            Select All Apps
+            <input
+                className="select-all-checkbox"
+                type="checkbox"
+                checked={filteredApps.every((app) => selectedApps.includes(app.path)) && filteredApps.length > 0}
+                onChange={(e) => {
+                const allFilteredPaths = filteredApps.map((app) => app.path);
+                if (e.target.checked) {
+                    const updatedSelection = [...new Set([...selectedApps, ...allFilteredPaths])];
+                    console.log("checked updatedSelection ", updatedSelection);
+
+                    setSelectedApps(updatedSelection);
+                    saveSelectedApps(updatedSelection);
+                } else {
+                    const updatedSelection = selectedApps.filter((path) => !allFilteredPaths.includes(path));
+                    console.log("not checked updatedSelection ", updatedSelection);
+
+                    setSelectedApps(updatedSelection);
+                    saveSelectedApps(updatedSelection);
+                }
+                }}
+            />
+            </label>
+          </div>
+          <ul>
+            {filteredApps.map((app) => (
+              <li key={app.path}>
+                <label className={selectedApps.includes(app.path) ? "selected" : ""} >
+                  <input
+                    className="module-checkbox"
+                    type="checkbox"
+                    checked={selectedApps.includes(app.path)}
+                    onChange={() => toggleAppSelection(app.path)}
+                  />
+                  {app.name}
+                </label>
+              </li>
+            ))}
+          </ul>
+        </>
+    );
+  }
+
+  const renderModules = () => {
+    return (
+      <>
+        <h2>Modules</h2>
+        <div className="modules">
             {displayedModules.map((module) => (
               <div
-                className={`module-card ${dragOverTarget === module.path ? "drag-over" : ""}`}
+                className={`card ${dragOverTarget === module.path ? "drag-over" : ""}`}
                 key={module.path}
                 draggable
                 onDragStart={(event) => handleDragStart(event, module.path)}
@@ -309,6 +419,173 @@ function App() {
               </div>
             ))}
           </div>
+      </>
+    );
+  };
+
+  const renderApps = () => {
+    return (
+      <>
+        <h2>Apps</h2>
+        <div className="modules">
+            {displayedApps.map((app) => (
+              <div
+                className={`card ${dragOverTarget === app.path ? "drag-over" : ""}`}
+                key={app.path}
+                draggable
+                onDragStart={(event) => handleDragStart(event, app.path)}
+                onDragOver={(event) => handleDragOver(event, app.path)}
+                onDrop={(event) => handleDrop(event, app.path)}
+                onDragLeave={handleDragLeave}
+              >
+                <h2>{app.name}</h2>
+                <p>Path: {app.path.substring(app.path.indexOf("/Apps"))}</p>
+                <h3>Scripts</h3>
+                <ul>
+                  {Object.entries(app.scripts).map(([scriptName]) => (
+                    <li key={scriptName}>{renderScriptButtons(app.path, scriptName)}</li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+      </>
+    );
+  };
+
+  const installDependencies = async (target) => {
+    let paths = [];
+  
+    if (target === "modules") {
+      paths = modules.map((module) => module.path);
+    } else if (target === "apps") {
+      paths = apps.map((app) => app.path);
+    } else if (target === "selectedModules") {
+      paths = selectedModules;
+    } else if (target === "selectedApps") {
+      paths = selectedApps;
+    }
+  
+    if (paths.length === 0) {
+      // alert("No paths to install dependencies for.");
+      return;
+    }
+  
+    try {
+      const response = await fetch(`${API_BASE}/install-dependencies`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths }),
+      });
+  
+      const data = await response.json();
+      if (data.success) {
+        alert("Dependencies installed successfully.");
+        console.log("Installation results:", data.results);
+      } else {
+        alert("Some installations failed.");
+        console.error(data.error);
+      }
+    } catch (error) {
+      alert("Error installing dependencies.");
+      console.error(error);
+    }
+  };
+
+  const switchToLocalFiles = async (target) => {
+    let paths = [];
+  
+    if (target === "modules") {
+      paths = modules.map((module) => module.path);
+      console.log("modules", paths);
+    } else if (target === "selectedModules") {
+      paths = selectedModules;
+      console.log("modules", selectedModules);
+
+    }
+
+    paths.concat(apps.map((app) => app.path));
+  
+    if (paths.length === 0) {
+      alert("No paths to link.");
+      return;
+    }
+  
+    try {
+      const response = await fetch(`${API_BASE}/switch-to-local-files`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ paths }),
+      });
+  
+      const data = await response.json();
+      if (data.success) {
+        alert("Modules successfully linked.");
+        console.log("Linking results:", data);
+      } else {
+        alert("Some linking operations failed.");
+        console.error(data.error);
+      }
+    } catch (error) {
+      alert("Error during linking.");
+      console.error(error);
+    }
+  };
+
+  const renderGlobalCommands = () => {
+    return (
+      <>
+        <h2>Global Commands</h2>
+        <ul>
+          <li>
+            {/* <button onClick={ () => installDependencies("modules")}>
+              NPM I All Modules 
+            </button>
+            <button onClick={ () => installDependencies("apps")}>
+              NPM I All Apps
+            </button> */}
+            <button className="command-button" onClick={ () => installDependencies("selectedModules")}>
+              npm i Selected Modules
+            </button>
+            <button className="command-button" onClick={ () => installDependencies("selectedApps")}>
+              npm i Selected Apps
+            </button>
+
+            <button className="command-button" onClick={ () => switchToLocalFiles("selectedModules")}>
+              use local files modules
+            </button>
+            <button className="command-button" onClick={ () => switchToLocalFiles("selectedApps")}>
+              use local files apps
+            </button>
+          </li>
+        </ul>
+      </>
+    );
+  };
+
+  return (
+    <div className="App">
+      
+      <div className="content">
+        <aside className="side-panel">
+          {/* <header>
+              <h1>Menu</h1>
+          </header> */}
+          {renderGlobalCommands()}
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search modules or apps"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          {renderModuleSideList()}
+          {renderAppSideList()}
+        </aside>
+        <main>
+          {renderModules()}
+          {renderApps()}
+          
         </main>
       </div>
     </div>

@@ -110,7 +110,7 @@ header {
   margin: 1rem;
 }
 
-.module-card {
+.card {
   border: 1px solid #ccc;
   border-radius: 5px;
   padding: 15px;
@@ -121,27 +121,27 @@ header {
   transition: transform 0.2s ease, box-shadow 0.2s ease;
 }
 
-.module-card h2 {
+.card h2 {
   margin-top: 0;
 }
 
-.module-card p {
+.card p {
   color: #858585;
 }
 
-.module-card ul {
+.card ul {
   list-style: none;
   padding: 0;
 }
 
-.module-card li {
+.card li {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 10px;
 }
 
-.module-card button {
+.card button {
   padding: 5px 10px;
   cursor: pointer;
   border: none;
@@ -151,7 +151,7 @@ header {
   width: 100%;
 }
 
-.module-card button:hover {
+.card button:hover {
   background-color: #0056b3;
 }
 
@@ -171,21 +171,33 @@ header {
   background-color: #151515 !important;
 }
 
-.module-card button:disabled {
+.card button:disabled {
   background-color: #ccc;
   cursor: not-allowed;
 }
 
-.module-card:active {
+.card:active {
   cursor: grabbing;
 }
 
-.module-card.dragging {
+.card.dragging {
   opacity: 0.5;
   border: 2px dashed #007bff;
 }
 
-.module-card.drag-over {
+.card.drag-over {
   transform: scale(1.05);
   box-shadow: 0 8px 16px rgba(0, 123, 255, 0.3);
+}
+
+.command-button {
+  padding: 5px 10px;
+  cursor: pointer;
+  border: none;
+  border-radius: 3px;
+  background-color: #007bff;
+  color: white;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 1rem;
 }

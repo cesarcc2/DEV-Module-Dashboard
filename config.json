@@ -1,3 +1,4 @@
 {
-    "modulesPath": "../../Modules"
+    "modulesPath": "../../Modules",
+    "appsPath": "../../Apps"
 }
